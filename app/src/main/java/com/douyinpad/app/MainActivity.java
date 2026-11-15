@@ -142,6 +142,53 @@ public class MainActivity extends AppCompatActivity {
                 // 主框架跳转交给 WebView 自己处理
                 return false;
             }
+
+            // 拦截 HTML，在 <head> 前注入反检测脚本（带上 cookie，避免丢会话）
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                if (url.contains("douyin.com") && request.isForMainFrame()
+                        && !url.contains(".js") && !url.contains(".css")) {
+                    try {
+                        java.net.HttpURLConnection conn =
+                            (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                        conn.setRequestProperty("User-Agent",
+                            "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 " +
+                            "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+                        conn.setRequestProperty("Accept", "text/html,application/xhtml+xml");
+                        // 带上 WebView 的 cookie，保持会话
+                        String cookie = CookieManager.getInstance().getCookie(url);
+                        if (cookie != null && !cookie.isEmpty()) {
+                            conn.setRequestProperty("Cookie", cookie);
+                        }
+                        conn.setInstanceFollowRedirects(true);
+                        conn.setConnectTimeout(10000);
+                        conn.setReadTimeout(10000);
+
+                        java.io.InputStream in = conn.getInputStream();
+                        String html = readStream(in);
+                        in.close();
+                        conn.disconnect();
+
+                        String inject = "<script>" + ANTI_DETECT_JS + "</script>";
+                        if (html.contains("<head")) {
+                            html = html.replaceFirst("(?i)<head[^>]*>",
+                                "$0" + java.util.regex.Matcher.quoteReplacement(inject));
+                        } else if (html.contains("<html")) {
+                            html = html.replaceFirst("(?i)<html[^>]*>",
+                                "$0<head>" + java.util.regex.Matcher.quoteReplacement(inject) + "</head>");
+                        }
+
+                        return new android.webkit.WebResourceResponse(
+                            "text/html", "UTF-8",
+                            new java.io.ByteArrayInputStream(html.getBytes("UTF-8")));
+                    } catch (Exception e) {
+                        return super.shouldInterceptRequest(view, request);
+                    }
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
         });
 
         webView.setWebChromeClient(new WebChromeClient());
@@ -154,6 +201,17 @@ public class MainActivity extends AppCompatActivity {
             return true;
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    /** 读取输入流为字符串 */
+    private String readStream(java.io.InputStream in) throws java.io.IOException {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) != -1) {
+            out.write(buf, 0, n);
+        }
+        return new String(out.toByteArray(), "UTF-8");
     }
 
     /** 反 WebView 检测脚本：抹掉 navigator.webdriver 等特征 */
