@@ -1,0 +1,8 @@
+# 强制 gradlew 脚本使用 LF 换行符（Linux 上执行必需）
+gradlew text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# 其他文件保持默认
+* text=auto
