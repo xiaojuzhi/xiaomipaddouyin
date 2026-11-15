@@ -19,7 +19,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 /**
  * 抖音直播平板版 - 纯沉浸式全屏
- * 无任何控件，抖音网页铺满整个屏幕
+ * 使用第一版验证可用的加载方式（Pad 7 Ultra UA + 跳转拦截返回 true）
  */
 public class MainActivity extends AppCompatActivity {
 
@@ -32,7 +32,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // 系统级沉浸式全屏：隐藏状态栏 + 导航栏
+        // 系统级沉浸式全屏
         hideSystemBars();
 
         setContentView(R.layout.activity_main);
@@ -42,9 +42,8 @@ public class MainActivity extends AppCompatActivity {
         webView.loadUrl(DOUYIN_HOME);
     }
 
-    /** 隐藏状态栏和导航栏，实现真正的系统级全屏 */
+    /** 隐藏状态栏和导航栏 */
     private void hideSystemBars() {
-        // 隐藏顶部状态栏（ActionBar）
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
         }
@@ -55,7 +54,6 @@ public class MainActivity extends AppCompatActivity {
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         );
 
-        // 沉浸式全屏（兼容新老 API）
         if (android.os.Build.VERSION.SDK_INT >= 30) {
             window.setDecorFitsSystemWindows(false);
             WindowInsetsController controller = window.getInsetsController();
@@ -91,103 +89,35 @@ public class MainActivity extends AppCompatActivity {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
-        // ===== 播放器内核性能优化 =====
-        // 开启硬件加速（视频解码用 GPU，不卡顿）
+        // 硬件加速
         settings.setRenderPriority(WebSettings.RenderPriority.HIGH);
-        // 视频优先：不拦截媒体
         settings.setBlockNetworkImage(false);
         settings.setLoadsImagesAutomatically(true);
 
-        // 伪装成正常手机 Chrome，避免抖音检测到 WebView 跳转下载页
-        // 关键：UA 中不能出现 "wv" 或 "; Version/"（这是 WebView 的特征标识）
+        // 第一版验证可用的 UA（不要改成 Pixel 等，会导致白屏/下载页）
         settings.setUserAgentString(
-            "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 " +
+            "Mozilla/5.0 (Linux; Android 14; Pad 7 Ultra) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
         );
 
-        // 开启 WebView 硬件加速层
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
-        // 允许 cookie，保持登录
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
-            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
-                super.onPageStarted(view, url, favicon);
-                // 尽早注入反检测脚本（抹掉 navigator.webdriver）
-                view.evaluateJavascript(ANTI_DETECT_JS, null);
-            }
-
-            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // 注入自动最高画质脚本
-                view.evaluateJavascript(AUTO_SCRIPT, null);
-            }
-
-            @Override
-            public void onReceivedError(WebView view, WebResourceRequest request,
-                                        android.webkit.WebResourceError error) {
-                super.onReceivedError(view, request, error);
-                // 加载失败时重试
-                if (request.isForMainFrame()) {
-                    view.postDelayed(() -> view.loadUrl(DOUYIN_HOME), 1000);
-                }
+                // 自动触发一次交互，激活抖音首页内容（相当于"点一下"）
+                view.evaluateJavascript(AUTO_CLICK_SCRIPT, null);
             }
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                // 主框架跳转交给 WebView 自己处理
-                return false;
-            }
-
-            // 拦截 HTML，在 <head> 前注入反检测脚本（带上 cookie，避免丢会话）
-            @Override
-            public android.webkit.WebResourceResponse shouldInterceptRequest(
-                    WebView view, WebResourceRequest request) {
-                String url = request.getUrl().toString();
-                if (url.contains("douyin.com") && request.isForMainFrame()
-                        && !url.contains(".js") && !url.contains(".css")) {
-                    try {
-                        java.net.HttpURLConnection conn =
-                            (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
-                        conn.setRequestProperty("User-Agent",
-                            "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 " +
-                            "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
-                        conn.setRequestProperty("Accept", "text/html,application/xhtml+xml");
-                        // 带上 WebView 的 cookie，保持会话
-                        String cookie = CookieManager.getInstance().getCookie(url);
-                        if (cookie != null && !cookie.isEmpty()) {
-                            conn.setRequestProperty("Cookie", cookie);
-                        }
-                        conn.setInstanceFollowRedirects(true);
-                        conn.setConnectTimeout(10000);
-                        conn.setReadTimeout(10000);
-
-                        java.io.InputStream in = conn.getInputStream();
-                        String html = readStream(in);
-                        in.close();
-                        conn.disconnect();
-
-                        String inject = "<script>" + ANTI_DETECT_JS + "</script>";
-                        if (html.contains("<head")) {
-                            html = html.replaceFirst("(?i)<head[^>]*>",
-                                "$0" + java.util.regex.Matcher.quoteReplacement(inject));
-                        } else if (html.contains("<html")) {
-                            html = html.replaceFirst("(?i)<html[^>]*>",
-                                "$0<head>" + java.util.regex.Matcher.quoteReplacement(inject) + "</head>");
-                        }
-
-                        return new android.webkit.WebResourceResponse(
-                            "text/html", "UTF-8",
-                            new java.io.ByteArrayInputStream(html.getBytes("UTF-8")));
-                    } catch (Exception e) {
-                        return super.shouldInterceptRequest(view, request);
-                    }
-                }
-                return super.shouldInterceptRequest(view, request);
+                // 第一版方式：loadUrl + 返回 true
+                view.loadUrl(request.getUrl().toString());
+                return true;
             }
         });
 
@@ -203,42 +133,15 @@ public class MainActivity extends AppCompatActivity {
         return super.onKeyDown(keyCode, event);
     }
 
-    /** 读取输入流为字符串 */
-    private String readStream(java.io.InputStream in) throws java.io.IOException {
-        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-        byte[] buf = new byte[8192];
-        int n;
-        while ((n = in.read(buf)) != -1) {
-            out.write(buf, 0, n);
-        }
-        return new String(out.toByteArray(), "UTF-8");
-    }
-
-    /** 反 WebView 检测脚本：抹掉 navigator.webdriver 等特征 */
-    private static final String ANTI_DETECT_JS =
-        "try{" +
-        "Object.defineProperty(navigator,'webdriver',{get:function(){return undefined;}});" +
-        "Object.defineProperty(navigator,'plugins',{get:function(){return [1,2,3,4,5];}});" +
-        "Object.defineProperty(navigator,'languages',{get:function(){return ['zh-CN','zh'];}});" +
-        "Object.defineProperty(navigator,'platform',{get:function(){return 'Linux armv8l';}});" +
-        "window.chrome=window.chrome||{runtime:{}};" +
-        "}catch(e){}";
-
-    /** 自动最高画质脚本 */
-    private static final String AUTO_SCRIPT =
+    /** 自动点击脚本：模拟点一下屏幕中央，激活抖音首页 */
+    private static final String AUTO_CLICK_SCRIPT =
         "javascript:(function(){" +
-        "  if(window.__douyinPadInjected)return; window.__douyinPadInjected=true;" +
-        "  function tryMaxQuality(){" +
+        "  setTimeout(function(){" +
         "    try{" +
-        "      var menu=document.querySelector('[class*=quality],[class*=Quality]');" +
-        "      if(menu){menu.click();}" +
-        "      setTimeout(function(){" +
-        "        var opts=document.querySelectorAll('[class*=quality-menu] li,[class*=Quality] li,li[class*=quality]');" +
-        "        if(opts&&opts.length){opts[opts.length-1].click();}" +
-        "      },300);" +
+        "      var x=window.innerWidth/2, y=window.innerHeight/2;" +
+        "      var el=document.elementFromPoint(x,y);" +
+        "      if(el){el.click();}" +
         "    }catch(e){}" +
-        "  }" +
-        "  setTimeout(tryMaxQuality,2000);" +
-        "  setTimeout(tryMaxQuality,5000);" +
+        "  },1500);" +
         "})();";
 }
