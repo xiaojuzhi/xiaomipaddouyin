@@ -18,11 +18,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 设置 Gradle
+      - name: 设置 Gradle（缓存加速）
         uses: gradle/actions/setup-gradle@v3
 
       - name: 编译 debug APK
-        run: gradle assembleDebug --no-daemon
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
 
       - name: 上传 APK 产物
         uses: actions/upload-artifact@v4
