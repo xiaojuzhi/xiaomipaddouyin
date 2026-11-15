@@ -94,18 +94,9 @@ public class MainActivity extends AppCompatActivity {
         // ===== 播放器内核性能优化 =====
         // 开启硬件加速（视频解码用 GPU，不卡顿）
         settings.setRenderPriority(WebSettings.RenderPriority.HIGH);
-        // 开启缓存，二次进入更快
-        settings.setAppCacheEnabled(true);
-        settings.setAppCachePath(getCacheDir().getAbsolutePath());
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        // 开启并发线程，加快页面加载
-        settings.setBlockNetworkImage(false);
         // 视频优先：不拦截媒体
+        settings.setBlockNetworkImage(false);
         settings.setLoadsImagesAutomatically(true);
-        // 平滑缩放，避免大屏抖动
-        settings.setEnableSmoothTransition(true);
-        // 禁用文字自动缩放，保证布局稳定
-        settings.setTextZoom(100);
 
         settings.setUserAgentString(
             "Mozilla/5.0 (Linux; Android 14; Pad 7 Ultra) AppleWebKit/537.36 " +
