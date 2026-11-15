@@ -98,8 +98,12 @@ public class MainActivity extends AppCompatActivity {
         settings.setBlockNetworkImage(false);
         settings.setLoadsImagesAutomatically(true);
 
-        // 使用默认 UA（自定义 UA 会被抖音识别异常导致无法打开）
-        // 不再设置 setUserAgentString
+        // 伪装成正常手机 Chrome，避免抖音检测到 WebView 跳转下载页
+        // 关键：UA 中不能出现 "wv" 或 "; Version/"（这是 WebView 的特征标识）
+        settings.setUserAgentString(
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+        );
 
         // 开启 WebView 硬件加速层
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
