@@ -133,15 +133,28 @@ public class MainActivity extends AppCompatActivity {
         return super.onKeyDown(keyCode, event);
     }
 
-    /** 自动点击脚本：模拟点一下屏幕中央，激活抖音首页 */
+    /** 自动点击脚本：优先点击「推荐」标签，找不到则点击中央激活首页 */
     private static final String AUTO_CLICK_SCRIPT =
         "javascript:(function(){" +
+        "  function clickText(keywords){" +
+        "    var all=document.querySelectorAll('a,div,span,li,p,button');" +
+        "    for(var i=0;i<all.length;i++){" +
+        "      var t=(all[i].innerText||all[i].textContent||'').trim();" +
+        "      if(t==='推荐'||t==='精彩'||t==='关注'){" +
+        "        all[i].click();" +
+        "        return true;" +
+        "      }" +
+        "    }" +
+        "    return false;" +
+        "  }" +
         "  setTimeout(function(){" +
         "    try{" +
-        "      var x=window.innerWidth/2, y=window.innerHeight/2;" +
-        "      var el=document.elementFromPoint(x,y);" +
-        "      if(el){el.click();}" +
+        "      if(!clickText()){" +
+        "        var x=window.innerWidth/2, y=window.innerHeight/2;" +
+        "        var el=document.elementFromPoint(x,y);" +
+        "        if(el){el.click();}" +
+        "      }" +
         "    }catch(e){}" +
-        "  },1500);" +
+        "  },2000);" +
         "})();";
 }
