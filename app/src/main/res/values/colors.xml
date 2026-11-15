@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色主题，贴合视频观看 -->
+    <color name="bg_primary">#0F1115</color>
+    <color name="bg_secondary">#1A1D23</color>
+    <color name="bg_nav">#171A20</color>
+    <color name="accent">#FE2C55</color>
+    <color name="accent_dark">#D91E45</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#9BA1AA</color>
+    <color name="divider">#2A2E36</color>
+    <color name="btn_bg">#242932</color>
+    <color name="icon_launcher_bg">#0F1115</color>
+</resources>

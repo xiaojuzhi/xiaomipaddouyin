@@ -1,0 +1,4 @@
+// 项目根 build.gradle（AGP 8.x 新写法）
+plugins {
+    id 'com.android.application' version '8.2.2' apply false
+}

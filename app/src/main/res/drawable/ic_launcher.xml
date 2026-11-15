@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 背景圆 -->
+    <path
+        android:fillColor="#0F1115"
+        android:pathData="M54,54 m-54,0 a54,54 0 1,1 108,0 a54,54 0 1,1 -108,0" />
+    <!-- 抖音音符 -->
+    <path
+        android:fillColor="#25F4EE"
+        android:pathData="M54,24 C58,30 66,36 76,38 L76,50 C66,48 60,42 58,36 L58,64 C58,76 48,84 38,84 C28,84 22,78 22,68 C22,58 30,52 40,52 C42,52 44,52 46,53 L46,64 C44,63 42,63 40,63 C36,63 33,65 33,68 C33,71 36,73 40,73 C45,73 48,69 48,64 L48,24 Z" />
+    <path
+        android:fillColor="#FE2C55"
+        android:pathData="M58,24 C58,32 64,40 74,42 L74,24 Z" />
+</vector>
