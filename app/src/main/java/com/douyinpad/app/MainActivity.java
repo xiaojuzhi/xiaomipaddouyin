@@ -132,12 +132,51 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                // 只在需要时处理跳转，主框架跳转交给 WebView 自己
-                String url = request.getUrl().toString();
-                if (url.startsWith("http://") || url.startsWith("https://")) {
-                    return false; // 交给 WebView 默认处理，避免拦截
-                }
+                // 主框架跳转交给 WebView 自己处理
                 return false;
+            }
+
+            // 关键：拦截 HTML 响应，在 <head> 最前面注入反 WebView 检测脚本
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                // 只处理抖音主页面
+                if (url.contains("douyin.com") && request.isForMainFrame()) {
+                    try {
+                        java.net.URL u = new java.net.URL(url);
+                        java.net.HttpURLConnection conn =
+                            (java.net.HttpURLConnection) u.openConnection();
+                        conn.setRequestProperty("User-Agent",
+                            "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 " +
+                            "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+                        conn.setRequestProperty("Accept", "text/html,application/xhtml+xml");
+                        conn.setConnectTimeout(10000);
+                        conn.setReadTimeout(10000);
+
+                        java.io.InputStream in = conn.getInputStream();
+                        String html = readStream(in);
+                        in.close();
+                        conn.disconnect();
+
+                        // 在 <head> 前注入反检测脚本
+                        String inject = "<script>" + ANTI_DETECT_JS + "</script>";
+                        if (html.contains("<head>")) {
+                            html = html.replaceFirst("<head>", "<head>" + inject);
+                        } else if (html.contains("<html>")) {
+                            html = html.replaceFirst("<html>", "<html><head>" + inject + "</head>");
+                        }
+
+                        java.io.ByteArrayInputStream data =
+                            new java.io.ByteArrayInputStream(html.getBytes("UTF-8"));
+                        return new android.webkit.WebResourceResponse(
+                            "text/html", "UTF-8", data);
+                    } catch (Exception e) {
+                        // 拦截失败则走默认
+                        return super.shouldInterceptRequest(view, request);
+                    }
+                }
+                return super.shouldInterceptRequest(view, request);
             }
         });
 
@@ -152,6 +191,26 @@ public class MainActivity extends AppCompatActivity {
         }
         return super.onKeyDown(keyCode, event);
     }
+
+    /** 读取输入流为字符串 */
+    private String readStream(java.io.InputStream in) throws java.io.IOException {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) != -1) {
+            out.write(buf, 0, n);
+        }
+        return new String(out.toByteArray(), "UTF-8");
+    }
+
+    /** 反 WebView 检测脚本：抹掉 navigator.webdriver 等特征 */
+    private static final String ANTI_DETECT_JS =
+        "Object.defineProperty(navigator,'webdriver',{get:function(){return undefined;}});" +
+        "window.chrome=window.chrome||{runtime:{}};" +
+        "Object.defineProperty(navigator,'plugins',{get:function(){return [1,2,3,4,5];}});" +
+        "Object.defineProperty(navigator,'languages',{get:function(){return ['zh-CN','zh'];});" +
+        "window.navigator.chrome=window.navigator.chrome||{runtime:{}};" +
+        "Object.defineProperty(navigator,'platform',{get:function(){return 'Linux armv8l';}});";
 
     /** 自动最高画质脚本 */
     private static final String AUTO_SCRIPT =
