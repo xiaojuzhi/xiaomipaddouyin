@@ -3,7 +3,7 @@ name: Build APK
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,9 +17,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: 设置 Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: 设置 Gradle
         uses: gradle/actions/setup-gradle@v3
