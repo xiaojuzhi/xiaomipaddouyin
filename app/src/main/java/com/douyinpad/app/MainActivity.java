@@ -98,10 +98,8 @@ public class MainActivity extends AppCompatActivity {
         settings.setBlockNetworkImage(false);
         settings.setLoadsImagesAutomatically(true);
 
-        settings.setUserAgentString(
-            "Mozilla/5.0 (Linux; Android 14; Pad 7 Ultra) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-        );
+        // 使用默认 UA（自定义 UA 会被抖音识别异常导致无法打开）
+        // 不再设置 setUserAgentString
 
         // 开启 WebView 硬件加速层
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
@@ -119,9 +117,23 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onReceivedError(WebView view, WebResourceRequest request,
+                                        android.webkit.WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                // 加载失败时重试
+                if (request.isForMainFrame()) {
+                    view.postDelayed(() -> view.loadUrl(DOUYIN_HOME), 1000);
+                }
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                view.loadUrl(request.getUrl().toString());
-                return true;
+                // 只在需要时处理跳转，主框架跳转交给 WebView 自己
+                String url = request.getUrl().toString();
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    return false; // 交给 WebView 默认处理，避免拦截
+                }
+                return false;
             }
         });
 
