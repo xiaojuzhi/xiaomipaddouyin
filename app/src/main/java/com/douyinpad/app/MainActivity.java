@@ -42,16 +42,17 @@ public class MainActivity extends AppCompatActivity {
         webView.loadUrl(DOUYIN_HOME);
     }
 
-    /** 隐藏状态栏和导航栏 */
+    /** 隐藏状态栏和导航栏（真正的平板全屏） */
     private void hideSystemBars() {
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
         }
 
         Window window = getWindow();
+        // 让布局铺满整个屏幕（延伸到系统栏区域之下）
         window.setFlags(
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            WindowManager.LayoutParams.FLAG_FULLSCREEN,
+            WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
 
         if (android.os.Build.VERSION.SDK_INT >= 30) {
@@ -72,6 +73,15 @@ public class MainActivity extends AppCompatActivity {
                 | View.SYSTEM_UI_FLAG_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
             );
+        }
+    }
+
+    /** 窗口重新获得焦点时再次强制全屏（防止系统栏重新显示） */
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            hideSystemBars();
         }
     }
 
