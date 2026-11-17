@@ -151,14 +151,13 @@ public class MainActivity extends AppCompatActivity {
         return super.onKeyDown(keyCode, event);
     }
 
-    /** 自动脚本：自动关闭登录弹窗（找关闭按钮/遮罩），让内容流不被遮挡 */
+    /** 自动脚本：自动关闭登录弹窗，让内容流不被遮挡 */
     private static final String AUTO_CLICK_SCRIPT =
         "javascript:(function(){" +
         "  function closeLogin(){" +
-        "    // 尝试找登录弹窗的关闭按钮（×）
-        "    var closes=document.querySelectorAll('[class*=\"close\"], [class*=\"Close\"], " +
-        "      [aria-label*=\"关闭\"], [aria-label*=\"close\"], .dy-account-close, " +
-        "      [class*=\"modal\"] [class*=\"close\"], [class*=\"dialog\"] [class*=\"close\"]');" +
+        "    var closes=document.querySelectorAll('[class*=\"close\"],[class*=\"Close\"]," +
+        "[aria-label*=\"close\"],[class*=\"modal\"] [class*=\"close\"]," +
+        "[class*=\"dialog\"] [class*=\"close\"]');" +
         "    for(var i=0;i<closes.length;i++){" +
         "      var c=closes[i];" +
         "      var r=c.getBoundingClientRect();" +
@@ -167,9 +166,8 @@ public class MainActivity extends AppCompatActivity {
         "        return true;" +
         "      }" +
         "    }" +
-        "    // 兜底：点击遮罩层（半透明背景）
-        "    var masks=document.querySelectorAll('[class*=\"mask\"], [class*=\"Mask\"], " +
-        "      [class*=\"overlay\"], [class*=\"Overlay\"]');" +
+        "    var masks=document.querySelectorAll('[class*=\"mask\"],[class*=\"Mask\"]," +
+        "[class*=\"overlay\"],[class*=\"Overlay\"]');" +
         "    for(var j=0;j<masks.length;j++){" +
         "      var m=masks[j];" +
         "      var rm=m.getBoundingClientRect();" +
