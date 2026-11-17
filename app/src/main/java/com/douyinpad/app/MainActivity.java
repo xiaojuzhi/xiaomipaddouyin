@@ -118,6 +118,10 @@ public class MainActivity extends AppCompatActivity {
         // 开启 WebView 的硬件加速离屏渲染（提升视频流畅度）
         webView.setDrawingCacheEnabled(false);
 
+        // ===== UI 放大（适合平板触屏，字更大、按钮更好点）=====
+        // 整体文字放大 30%
+        settings.setTextZoom(130);
+
         // 关键：用桌面版 Chrome UA（参考 douyin-tv 成熟方案）。
         // 抖音网页版对桌面 UA 返回内容流（可看视频），对移动 UA 才跳"下载App"引导页。
         settings.setUserAgentString(
@@ -132,7 +136,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // 自动触发一次交互，激活抖音首页内容（相当于"点一下"）
+                // 注入 UI 放大 CSS + 自动关闭登录弹窗
                 view.evaluateJavascript(AUTO_CLICK_SCRIPT, null);
             }
 
@@ -162,9 +166,19 @@ public class MainActivity extends AppCompatActivity {
         return super.onKeyDown(keyCode, event);
     }
 
-    /** 自动脚本：自动关闭登录弹窗，让内容流不被遮挡 */
+    /** 自动脚本：注入UI放大CSS + 自动关闭登录弹窗 */
     private static final String AUTO_CLICK_SCRIPT =
         "javascript:(function(){" +
+        "  function zoomUI(){" +
+        "    var s=document.getElementById('__dp_zoom');" +
+        "    if(s){return;}" +
+        "    s=document.createElement('style');" +
+        "    s.id='__dp_zoom';" +
+        "    s.textContent='html{font-size:120% !important;}' +" +
+        "      ' body{zoom:1.1;}' +" +
+        "      ' [class*=\"video\"], [class*=\"card\"], [class*=\"item\"]{min-height:auto;}' ;" +
+        "    document.head.appendChild(s);" +
+        "  }" +
         "  function closeLogin(){" +
         "    var closes=document.querySelectorAll('[class*=\"close\"],[class*=\"Close\"]," +
         "[aria-label*=\"close\"],[class*=\"modal\"] [class*=\"close\"]," +
@@ -189,6 +203,7 @@ public class MainActivity extends AppCompatActivity {
         "    }" +
         "    return false;" +
         "  }" +
+        "  zoomUI();" +
         "  var tries=0;" +
         "  var timer=setInterval(function(){" +
         "    tries++;" +
