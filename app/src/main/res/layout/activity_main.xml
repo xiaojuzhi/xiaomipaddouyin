@@ -4,9 +4,9 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <!-- GeckoView 火狐内核，铺满全屏 -->
-    <org.mozilla.geckoview.GeckoView
-        android:id="@+id/geckoView"
+    <!-- 纯 WebView 铺满，无任何额外控件 -->
+    <WebView
+        android:id="@+id/webView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 </FrameLayout>
