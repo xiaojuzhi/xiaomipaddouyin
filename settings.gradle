@@ -10,6 +10,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // GeckoView 专属仓库（必须，GeckoView 不发布在 Maven Central）
+        maven { url 'https://maven.mozilla.org/maven2' }
     }
 }
 rootProject.name = "DouyinPad"

@@ -8,53 +8,37 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
-import android.webkit.CookieManager;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
 
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
+import org.mozilla.geckoview.AllowOrDeny;
+import org.mozilla.geckoview.GeckoResult;
+import org.mozilla.geckoview.GeckoRuntime;
+import org.mozilla.geckoview.GeckoRuntimeSettings;
+import org.mozilla.geckoview.GeckoSession;
+import org.mozilla.geckoview.GeckoSessionSettings;
+import org.mozilla.geckoview.GeckoView;
+
 /**
- * 抖音直播平板版 - 纯沉浸式全屏
- * 使用第一版验证可用的加载方式（桌面版 Chrome UA + 跳转拦截返回 true）
+ * 抖音直播平板版 - GeckoView 火狐内核（独立完整内核，解决系统 WebView 直播卡顿）
+ * 纯沉浸式全屏，桌面版 Chrome UA + 私有协议拦截 + 资源拦截
  */
 public class MainActivity extends AppCompatActivity {
 
-    private WebView webView;
+    private GeckoView geckoView;
+    private GeckoSession session;
+    private GeckoRuntime runtime;
+    private boolean canGoBack = false;
 
-    // 抖音网页版精选页入口（jingxuan 是能直接播放内容流的正确入口，参考成熟开源项目 douyin-tv）
+    // 抖音网页版精选页入口
     private static final String DOUYIN_HOME = "https://www.douyin.com/jingxuan?from_nav=1";
 
-    // ===== 资源拦截：屏蔽抖音的分析/监控/追踪埋点请求（参考 douyin-tv，解决卡顿的关键）=====
-    // 这些请求在直播时会持续抢占 CPU 和带宽，屏蔽后能明显降低卡顿。
-    private static final Set<String> BLOCKED_DOMAINS = new HashSet<>(Arrays.asList(
-        "mcs.snssdk.com", "mcs.zijieapi.com", "mon.zijieapi.com", "mon.snssdk.com",
-        "mssdk.bytedance.com", "security.zijieapi.com", "vcs.zijieapi.com",
-        "privacy.zijieapi.com", "lf-static.applogcdn.com", "lf3-short.ibytedapm.com",
-        "tnc0-aliec2.zijieapi.com", "frontier.zijieapi.com", "log.snssdk.com",
-        "analytics.snssdk.com", "ad.zijieapi.com", "ads.snssdk.com",
-        "sf-tb-sg.ibytedtos.com", "log.byteoversea.com", "applog.ucdn.uc.cn",
-        "i.snssdk.com", "slardar.bytedance.com", "log.zijieapi.com", "apm.zijieapi.com"
-    ));
-
-    private static final Set<String> BLOCKED_PATHS = new HashSet<>(Arrays.asList(
-        "/sentry", "/slardar", "/monitor", "/analytics", "/tracking", "/collect"
-    ));
-
-    // 返回空响应，代替被屏蔽的资源
-    private static final WebResourceResponse BLOCKED_RESPONSE = new WebResourceResponse(
-        "text/plain", "utf-8", new ByteArrayInputStream(new byte[0])
-    );
+    // 桌面版 Chrome UA（抖音对桌面 UA 返回内容流，对移动 UA 跳下载页）
+    private static final String DESKTOP_UA =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -65,10 +49,70 @@ public class MainActivity extends AppCompatActivity {
         hideSystemBars();
 
         setContentView(R.layout.activity_main);
-        webView = findViewById(R.id.webView);
+        geckoView = findViewById(R.id.geckoView);
 
-        configureWebView();
-        webView.loadUrl(DOUYIN_HOME);
+        // 初始化 GeckoRuntime（全局共享，只需创建一次）
+        runtime = GeckoRuntime.create(this);
+        GeckoRuntimeSettings runtimeSettings = runtime.getSettings();
+        // 启用 JavaScript
+        runtimeSettings.setJavaScriptEnabled(true);
+        // 允许自动播放（直播进入即播）
+        runtimeSettings.setAutoplayDefault(GeckoRuntimeSettings.AUTOPLAY_DEFAULT_ALLOWED);
+        // 关闭远程调试（正式版不需要）
+        runtimeSettings.setRemoteDebuggingEnabled(false);
+
+        // 创建会话并配置
+        session = new GeckoSession();
+        GeckoSessionSettings sessionSettings = session.getSettings();
+        // 桌面版 Chrome UA
+        sessionSettings.setUserAgentOverride(DESKTOP_UA);
+        // 桌面模式 viewport
+        sessionSettings.setDisplayMode(GeckoSessionSettings.DISPLAY_MODE_BROWSER);
+
+        // 导航委托：拦截私有协议
+        session.setNavigationDelegate(new GeckoSession.NavigationDelegate() {
+            @Override
+            public @Nullable GeckoResult<AllowOrDeny> onLoadRequest(
+                    @NonNull GeckoSession session,
+                    @NonNull LoadRequest request) {
+                String url = request.uri;
+                if (url == null) {
+                    return GeckoResult.fromValue(AllowOrDeny.ALLOW);
+                }
+                // 拦截抖音私有协议（bytedance:// snssdk:// 等），否则报"网页无法打开"
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    return GeckoResult.fromValue(AllowOrDeny.DENY);
+                }
+                return GeckoResult.fromValue(AllowOrDeny.ALLOW);
+            }
+
+            @Override
+            public void onCanGoBack(@NonNull GeckoSession session, boolean canGoBack) {
+                MainActivity.this.canGoBack = canGoBack;
+            }
+        });
+
+        // 页面加载完成注入脚本
+        session.setProgressDelegate(new GeckoSession.ProgressDelegate() {
+            @Override
+            public void onPageStop(@NonNull GeckoSession session, boolean success) {
+                if (success) {
+                    injectScripts();
+                }
+            }
+        });
+
+        // 绑定到视图并加载
+        geckoView.setSession(session);
+        session.open(runtime);
+        session.loadUri(DOUYIN_HOME);
+    }
+
+    /** 注入性能优化脚本（GeckoView 用 javascript: URI 方式注入） */
+    private void injectScripts() {
+        try {
+            session.loadUri("javascript:" + PERF_SCRIPT);
+        } catch (Exception ignored) {}
     }
 
     /** 隐藏状态栏和导航栏（真正的平板全屏） */
@@ -76,13 +120,11 @@ public class MainActivity extends AppCompatActivity {
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
         }
-
         Window window = getWindow();
         window.setFlags(
             WindowManager.LayoutParams.FLAG_FULLSCREEN,
             WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
-
         if (android.os.Build.VERSION.SDK_INT >= 30) {
             window.setDecorFitsSystemWindows(false);
             WindowInsetsController controller = window.getInsetsController();
@@ -104,7 +146,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** 窗口重新获得焦点时再次强制全屏（防止系统栏重新显示） */
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
@@ -113,204 +154,37 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
-    private void configureWebView() {
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setLoadWithOverviewMode(true);
-        settings.setUseWideViewPort(true);
-        settings.setSupportZoom(false);
-        settings.setBuiltInZoomControls(false);
-        settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-
-        // ===== 播放内核 / 解码优化（解决直播卡顿，最关键）=====
-        // 1. 强制硬件加速：视频走 GPU 硬解 H.264，而不是 wasm/软解
-        settings.setRenderPriority(WebSettings.RenderPriority.HIGH);
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-
-        // 2. 允许加载图片、关闭网络图片拦截，减少页面重排
-        settings.setBlockNetworkImage(false);
-        settings.setLoadsImagesAutomatically(true);
-
-        // 3. 关闭过度滚动动画和离屏缓存，减轻渲染线程负担，把性能让给视频解码
-        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        webView.setDrawingCacheEnabled(false);
-
-        // 4. 允许自动播放 + 无需用户手势即可播放（直播进入即播，不卡在等待点击）
-        settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setAllowFileAccess(true);
-
-        // 5. 黑色背景避免白屏闪烁 + 减少合成开销
-        webView.setBackgroundColor(android.graphics.Color.BLACK);
-
-        // 6. 关闭 WebView 的调试端口（正式版不需要，去掉还能省一点开销）
-        //    （已移除 setWebContentsDebuggingEnabled）
-
-        // 7. 关闭滚动条绘制开销，减少滚动时的合成负担
-        webView.setScrollBarStyle(View.SCROLLBARS_OUTSIDE_OVERLAY);
-
-        // ===== UI 缩放 =====
-        // 直播列表页在 130 下观感正好（文字相对字号，受 setTextZoom 影响），保持 130。
-        // 精选/推荐视频流的卡片标题是固定像素字号，setTextZoom 对其无效，
-        // 需要在 onPageFinished 里根据 URL 注入更强的 CSS 放大（见下）。
-        settings.setTextZoom(130);
-
-        // 关键：用桌面版 Chrome UA（参考 douyin-tv 成熟方案）。
-        // 抖音网页版对桌面 UA 返回内容流（可看视频），对移动 UA 才跳"下载App"引导页。
-        settings.setUserAgentString(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        );
-
-        CookieManager.getInstance().setAcceptCookie(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
-
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                String url = request.getUrl().toString().toLowerCase();
-                // 按域名屏蔽埋点/监控/追踪请求
-                try {
-                    String host = request.getUrl().getHost();
-                    if (host != null && BLOCKED_DOMAINS.contains(host.toLowerCase())) {
-                        return BLOCKED_RESPONSE;
-                    }
-                } catch (Exception ignored) {}
-                // 按路径屏蔽（Sentry/Slardar 错误上报等）
-                for (String path : BLOCKED_PATHS) {
-                    if (url.contains(path)) {
-                        return BLOCKED_RESPONSE;
-                    }
-                }
-                return super.shouldInterceptRequest(view, request);
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                // 根据页面类型注入不同脚本：
-                // - 精选/推荐视频流页（密集网格、文字小）→ 强 CSS 放大
-                // - 直播页（live.douyin.com）→ 保持原样，只做登录弹窗关闭
-                boolean isLive = url.contains("live.douyin.com");
-                boolean isVideoFeed = !isLive && (url.contains("jingxuan") || url.contains("recommend")
-                        || url.contains("discover") || url.contains("/user/") || url.contains("/video/")
-                        || url.endsWith("douyin.com") || url.endsWith("douyin.com/"));
-                String script = isVideoFeed ? VIDEO_FEED_SCRIPT : AUTO_CLICK_SCRIPT;
-                view.evaluateJavascript(script, null);
-                // 无论哪个页面都注入性能优化脚本（防内存堆积 + 减渲染负担，解决卡顿）
-                view.evaluateJavascript(PERF_SCRIPT, null);
-            }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String url = request.getUrl().toString();
-                // 关键：拦截抖音的私有协议跳转（bytedance:// snssdk:// 等），
-                // 否则 WebView 会报 net::ERR_UNKNOWN_URL_SCHEME 导致"网页无法打开"
-                if (url.startsWith("http://") || url.startsWith("https://")) {
-                    view.loadUrl(url);
-                    return true;
-                }
-                // 非 http/https 协议（bytedance:// 等）一律拦截，不加载
-                return true;
-            }
-        });
-
-        webView.setWebChromeClient(new WebChromeClient());
-    }
-
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK && webView.canGoBack()) {
-            webView.goBack();
+        if (keyCode == KeyEvent.KEYCODE_BACK && canGoBack && session != null) {
+            session.goBack();
             return true;
         }
         return super.onKeyDown(keyCode, event);
     }
 
-    /**
-     * 精选/推荐视频流专用脚本：强 CSS 放大 + 持续注入。
-     * 精选页视频卡片标题是固定像素字号（setTextZoom 无效），必须用 CSS 强制放大。
-     * 抖音是 SPA，页面会反复重绘覆盖注入的 style，所以用 MutationObserver + 定时器持续兜底。
-     */
-    private static final String VIDEO_FEED_SCRIPT =
-        "javascript:(function(){" +
-        "  var CSS_ID='__dp_feed_zoom';" +
-        "  function buildCss(){" +
-        "    return 'html{font-size:120% !important;}' +" +
-        // 用 zoom 整体放大（对固定 px 也有效）
-        "      ' body{zoom:1.3 !important;}' +" +
-        // 放大卡片标题/作者/互动数据（子串匹配类名）
-        "      ' [class*=\"title\"], [class*=\"Title\"]{font-size:1.25em !important; line-height:1.45 !important;}' +" +
-        "      ' [class*=\"author\"], [class*=\"Author\"], [class*=\"nickname\"], [class*=\"Nickname\"], [class*=\"name\"]{font-size:1.2em !important;}' +" +
-        "      ' [class*=\"count\"], [class*=\"Count\"], [class*=\"like\"], [class*=\"Like\"], [class*=\"comment\"], [class*=\"Comment\"], [class*=\"statistic\"], [class*=\"Statistic\"], [class*=\"data\"]{font-size:1.2em !important;}' +" +
-        "      ' [class*=\"tag\"], [class*=\"Tag\"], [class*=\"badge\"], [class*=\"Badge\"], [class*=\"duration\"], [class*=\"Duration\"]{font-size:1.15em !important;}' ;" +
-        "  }" +
-        "  function ensureStyle(){" +
-        "    var s=document.getElementById(CSS_ID);" +
-        "    if(!s){ s=document.createElement('style'); s.id=CSS_ID; document.head.appendChild(s); }" +
-        "    if(s.textContent.indexOf('zoom:1.3')<0){ s.textContent=buildCss(); }" +
-        "  }" +
-        "  function closeLogin(){" +
-        "    var closes=document.querySelectorAll('[class*=\"close\"],[class*=\"Close\"]," +
-        "[aria-label*=\"close\"],[class*=\"modal\"] [class*=\"close\"]," +
-        "[class*=\"dialog\"] [class*=\"close\"]');" +
-        "    for(var i=0;i<closes.length;i++){" +
-        "      var c=closes[i]; var r=c.getBoundingClientRect();" +
-        "      if(r.width>0 && r.height>0 && r.width<100 && r.height<100){ c.click(); return true; }" +
-        "    }" +
-        "    return false;" +
-        "  }" +
-        "  ensureStyle();" +
-        "  // MutationObserver 监听 DOM 变化，防止 SPA 重绘覆盖注入的 style" +
-        "  try{" +
-        "    var mo=new MutationObserver(function(){ ensureStyle(); });" +
-        "    mo.observe(document.head, {childList:true});" +
-        "  }catch(e){}" +
-        "  // 定时兜底：持续确保样式存在 + 关登录弹窗" +
-        "  var t=0;" +
-        "  var timer=setInterval(function(){" +
-        "    ensureStyle(); try{ closeLogin(); }catch(e){}" +
-        "    if(++t>20){ clearInterval(timer); }" +
-        "  },2000);" +
-        "})();";
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (session != null) {
+            session.close();
+            session = null;
+        }
+        if (runtime != null) {
+            runtime.shutdown();
+            runtime = null;
+        }
+    }
 
     /**
-     * 直播页脚本：保持 UI 原样（setTextZoom 130 已足够），只自动关闭登录弹窗。
-     */
-    private static final String AUTO_CLICK_SCRIPT =
-        "javascript:(function(){" +
-        "  function closeLogin(){" +
-        "    var closes=document.querySelectorAll('[class*=\"close\"],[class*=\"Close\"]," +
-        "[aria-label*=\"close\"],[class*=\"modal\"] [class*=\"close\"]," +
-        "[class*=\"dialog\"] [class*=\"close\"]');" +
-        "    for(var i=0;i<closes.length;i++){" +
-        "      var c=closes[i]; var r=c.getBoundingClientRect();" +
-        "      if(r.width>0 && r.height>0 && r.width<100 && r.height<100){ c.click(); return true; }" +
-        "    }" +
-        "    return false;" +
-        "  }" +
-        "  var t=0;" +
-        "  var timer=setInterval(function(){" +
-        "    try{ closeLogin(); }catch(e){}" +
-        "    if(++t>8){ clearInterval(timer); }" +
-        "  },1500);" +
-        "})();";
-
-    /**
-     * 性能优化脚本（参考"抖音网页版全能优化"油猴脚本 + douyin-tv，解决卡顿）：
-     * 1. 定期清理远离视口的视频卡片 DOM，防止内存无限堆积导致越用越卡
+     * 性能优化脚本（解决卡顿）：
+     * 1. 定期清理远离视口的视频卡片 DOM，防止内存堆积
      * 2. 禁用礼物动画/入场特效/弹幕飘屏等 GPU 开销大的动画
-     * 3. 视频仅预加载元数据，避免同时解码多个视频抢资源
-     * 4. 隐藏广告/推广等非视频元素
+     * 3. 视频仅预加载元数据，避免多个视频同时解码
      */
     private static final String PERF_SCRIPT =
-        "javascript:(function(){" +
+        "(function(){" +
         "  if(window.__dp_perf) return; window.__dp_perf=true;" +
-        "  // 禁用重动画：礼物特效、入场特效、飘屏、粒子等" +
         "  function killAnimations(){" +
         "    var s=document.getElementById('__dp_perf_css');" +
         "    if(!s){" +
@@ -323,14 +197,11 @@ public class MainActivity extends AppCompatActivity {
         "      document.head.appendChild(s);" +
         "    }" +
         "  }" +
-        "  // 视频优化：只预加载元数据，避免后台多个视频同时拉流解码" +
         "  function optimizeVideos(){" +
         "    document.querySelectorAll('video').forEach(function(v){" +
         "      if(v.getAttribute('preload')!=='metadata') v.setAttribute('preload','metadata');" +
-        "      try{ v.disableRemotePlayback=true; }catch(e){}" +
         "    });" +
         "  }" +
-        "  // 清理远离视口的视频卡片 DOM，释放内存（关键，防越用越卡）" +
         "  var lastClean=0;" +
         "  function cleanupDom(){" +
         "    var now=Date.now();" +
