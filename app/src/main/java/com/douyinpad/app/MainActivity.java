@@ -105,9 +105,12 @@ public class MainActivity extends AppCompatActivity {
         settings.setBlockNetworkImage(false);
         settings.setLoadsImagesAutomatically(true);
 
-        // 使用 WebView 默认 UA（参考成熟项目 douyin-tv：不设置 UA 也能正常播放，
-        // 关键在入口 URL 用 jingxuan 精选页，而非纠结 UA）
-        // settings.setUserAgentString(...);  —— 已移除，走默认
+        // 关键：用桌面版 Chrome UA（参考 douyin-tv 成熟方案）。
+        // 抖音网页版对桌面 UA 返回内容流（可看视频），对移动 UA 才跳"下载App"引导页。
+        settings.setUserAgentString(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        );
 
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
