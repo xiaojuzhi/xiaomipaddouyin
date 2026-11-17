@@ -56,8 +56,6 @@ public class MainActivity extends AppCompatActivity {
         GeckoRuntimeSettings runtimeSettings = runtime.getSettings();
         // 启用 JavaScript
         runtimeSettings.setJavaScriptEnabled(true);
-        // 允许自动播放（直播进入即播）
-        runtimeSettings.setAutoplayDefault(GeckoRuntimeSettings.AUTOPLAY_DEFAULT_ALLOWED);
         // 关闭远程调试（正式版不需要）
         runtimeSettings.setRemoteDebuggingEnabled(false);
 
@@ -89,6 +87,18 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onCanGoBack(@NonNull GeckoSession session, boolean canGoBack) {
                 MainActivity.this.canGoBack = canGoBack;
+            }
+        });
+
+        // 权限委托：允许自动播放媒体（直播进入即播，关键）
+        session.setPermissionDelegate(new GeckoSession.PermissionDelegate() {
+            @Override
+            public @Nullable GeckoResult<Integer> onContentPermissionRequest(
+                    @NonNull GeckoSession session, @NonNull ContentPermission perm) {
+                if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_MEDIA) {
+                    return GeckoResult.fromValue(ContentPermission.VALUE_ALLOW);
+                }
+                return GeckoResult.fromValue(ContentPermission.VALUE_ALLOW);
             }
         });
 
