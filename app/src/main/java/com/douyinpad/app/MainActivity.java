@@ -136,8 +136,14 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // 注入 UI 放大 CSS + 自动关闭登录弹窗
-                view.evaluateJavascript(AUTO_CLICK_SCRIPT, null);
+                // 根据页面类型注入不同的 UI 缩放策略
+                // 精选/推荐视频流页面（5列密集网格）需要更强放大，直播页保持现状。
+                // 关键：live.douyin.com 开头的直播页一定不走视频流增强，避免误伤直播页。
+                boolean isLive = url.contains("live.douyin.com");
+                boolean isVideoFeed = !isLive && (url.contains("jingxuan") || url.contains("recommend")
+                        || url.contains("discover") || url.contains("/user/") || url.contains("/video/"));
+                String script = isVideoFeed ? VIDEO_FEED_SCRIPT : AUTO_CLICK_SCRIPT;
+                view.evaluateJavascript(script, null);
             }
 
             @Override
@@ -165,6 +171,35 @@ public class MainActivity extends AppCompatActivity {
         }
         return super.onKeyDown(keyCode, event);
     }
+
+    /**
+     * 精选/推荐视频流页面专用脚本：
+     * 该页面是 5 列密集网格，卡片标题和互动数据文字太小。
+     * 策略：整体 zoom 放大 + 放大卡片标题/作者/互动数据字号 + 放大缩略图角标，
+     * 让观感接近直播列表页（4列大卡片、字更大更清楚）。
+     */
+    private static final String VIDEO_FEED_SCRIPT =
+        "javascript:(function(){" +
+        "  function zoomFeed(){" +
+        "    var s=document.getElementById('__dp_feed');" +
+        "    if(s){return;}" +
+        "    s=document.createElement('style');" +
+        "    s.id='__dp_feed';" +
+        "    var css='html{font-size:120% !important;}' +" +
+        "      ' body{zoom:1.25;}' +" +
+        // 放大视频卡片标题、作者名、互动数据（通用选择器，不依赖哈希类名）
+        "      ' [class*=\"title\"], [class*=\"Title\"]{font-size:1.25em !important; line-height:1.4 !important;}' +" +
+        "      ' [class*=\"author\"], [class*=\"Author\"], [class*=\"nickname\"], [class*=\"Nickname\"], [class*=\"name\"]{font-size:1.2em !important;}' +" +
+        "      ' [class*=\"count\"], [class*=\"Count\"], [class*=\"like\"], [class*=\"Like\"], [class*=\"comment\"], [class*=\"Comment\"], [class*=\"statistic\"], [class*=\"Statistic\"], [class*=\"data\"]{font-size:1.2em !important;}' +" +
+        // 缩略图上的角标（时长、播放量）也放大
+        "      ' [class*=\"tag\"], [class*=\"Tag\"], [class*=\"badge\"], [class*=\"Badge\"], [class*=\"duration\"], [class*=\"Duration\"], [class*=\"hot\"], [class*=\"Hot\"]{font-size:1.15em !important;}' +" +
+        // 视频卡片网格放宽：让卡片最小宽度变大，5列变3列，观感更接近直播列表页
+        "      ' [class*=\"waterfall\"], [class*=\"Waterfall\"], [class*=\"grid\"], [class*=\"Grid\"], [class*=\"list\"], [class*=\"List\"], [class*=\"feed\"], [class*=\"Feed\"], [class*=\"container\"], [class*=\"Container\"]{grid-template-columns:repeat(auto-fill,minmax(360px,1fr)) !important; column-gap:24px !important; row-gap:24px !important;}' ;" +
+        "    s.textContent=css;" +
+        "    document.head.appendChild(s);" +
+        "  }" +
+        "  zoomFeed();" +
+        "})();";
 
     /** 自动脚本：注入UI放大CSS + 自动关闭登录弹窗 */
     private static final String AUTO_CLICK_SCRIPT =
