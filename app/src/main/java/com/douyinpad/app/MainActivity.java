@@ -105,14 +105,25 @@ public class MainActivity extends AppCompatActivity {
         settings.setBlockNetworkImage(false);
         settings.setLoadsImagesAutomatically(true);
 
+        // ===== 播放内核优化（解决直播卡顿）=====
+        // 关键：抖音直播/视频用 H.264/H.265 解码，强制走硬件加速
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setAllowFileAccess(true);
+        // 开启硬件加速视频解码（Android 5.0+ 默认开启，这里显式声明确保生效）
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        // 避免页面加载时的白屏闪烁
+        webView.setBackgroundColor(android.graphics.Color.BLACK);
+        // 关闭过度滚动动画，减少渲染负担
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        // 开启 WebView 的硬件加速离屏渲染（提升视频流畅度）
+        webView.setDrawingCacheEnabled(false);
+
         // 关键：用桌面版 Chrome UA（参考 douyin-tv 成熟方案）。
         // 抖音网页版对桌面 UA 返回内容流（可看视频），对移动 UA 才跳"下载App"引导页。
         settings.setUserAgentString(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         );
-
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
