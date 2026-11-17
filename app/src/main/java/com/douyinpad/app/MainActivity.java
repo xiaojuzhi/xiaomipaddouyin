@@ -25,7 +25,8 @@ public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
 
-    private static final String DOUYIN_HOME = "https://www.douyin.com/";
+    // 抖音网页版推荐流入口（带 recommend 参数，直接进内容流，跳过电脑版落地页）
+    private static final String DOUYIN_HOME = "https://www.douyin.com/?recommend=1";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -105,9 +106,12 @@ public class MainActivity extends AppCompatActivity {
         settings.setLoadsImagesAutomatically(true);
 
         // 第一版验证可用的 UA（不要改成 Pixel 等，会导致白屏/下载页）
+        // 标准移动端 UA（让抖音返回手机版内容流，而不是电脑版落地页）
+        // 注意：不要用带 wv 的 UA（会被识别为 WebView），也不要用非常规设备名
         settings.setUserAgentString(
-            "Mozilla/5.0 (Linux; Android 14; Pad 7 Ultra) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+            "Mozilla/5.0 (Linux; Android 14; 24030PN60G Build/UKQ1.231003.002) " +
+            "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/122.0.0.0 " +
+            "Mobile Safari/537.36"
         );
 
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
