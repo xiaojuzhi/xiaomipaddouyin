@@ -95,7 +95,9 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public @Nullable GeckoResult<Integer> onContentPermissionRequest(
                     @NonNull GeckoSession session, @NonNull ContentPermission perm) {
-                if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_MEDIA) {
+                // 允许有声和静音自动播放（直播/视频需要）
+                if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE
+                        || perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE) {
                     return GeckoResult.fromValue(ContentPermission.VALUE_ALLOW);
                 }
                 return GeckoResult.fromValue(ContentPermission.VALUE_ALLOW);
