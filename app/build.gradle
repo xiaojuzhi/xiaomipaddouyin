@@ -36,5 +36,6 @@ dependencies {
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.webkit:webkit:1.10.0'
     // GeckoView 火狐内核（独立完整内核，解决系统 WebView 直播卡顿）
-    implementation 'org.mozilla.geckoview:geckoview:160.0.20261104181552'
+    // 用 127 系：兼容 compileSdk 34 + AGP 8.2.2（160 系需要 compileSdk 37）
+    implementation 'org.mozilla.geckoview:geckoview:127.0.20240624183754'
 }
