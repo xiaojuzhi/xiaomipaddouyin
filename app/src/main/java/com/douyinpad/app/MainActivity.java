@@ -11,9 +11,16 @@ import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -27,6 +34,27 @@ public class MainActivity extends AppCompatActivity {
 
     // 抖音网页版精选页入口（jingxuan 是能直接播放内容流的正确入口，参考成熟开源项目 douyin-tv）
     private static final String DOUYIN_HOME = "https://www.douyin.com/jingxuan?from_nav=1";
+
+    // ===== 资源拦截：屏蔽抖音的分析/监控/追踪埋点请求（参考 douyin-tv，解决卡顿的关键）=====
+    // 这些请求在直播时会持续抢占 CPU 和带宽，屏蔽后能明显降低卡顿。
+    private static final Set<String> BLOCKED_DOMAINS = new HashSet<>(Arrays.asList(
+        "mcs.snssdk.com", "mcs.zijieapi.com", "mon.zijieapi.com", "mon.snssdk.com",
+        "mssdk.bytedance.com", "security.zijieapi.com", "vcs.zijieapi.com",
+        "privacy.zijieapi.com", "lf-static.applogcdn.com", "lf3-short.ibytedapm.com",
+        "tnc0-aliec2.zijieapi.com", "frontier.zijieapi.com", "log.snssdk.com",
+        "analytics.snssdk.com", "ad.zijieapi.com", "ads.snssdk.com",
+        "sf-tb-sg.ibytedtos.com", "log.byteoversea.com", "applog.ucdn.uc.cn",
+        "i.snssdk.com", "slardar.bytedance.com", "log.zijieapi.com", "apm.zijieapi.com"
+    ));
+
+    private static final Set<String> BLOCKED_PATHS = new HashSet<>(Arrays.asList(
+        "/sentry", "/slardar", "/monitor", "/analytics", "/tracking", "/collect"
+    ));
+
+    // 返回空响应，代替被屏蔽的资源
+    private static final WebResourceResponse BLOCKED_RESPONSE = new WebResourceResponse(
+        "text/plain", "utf-8", new ByteArrayInputStream(new byte[0])
+    );
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -143,6 +171,25 @@ public class MainActivity extends AppCompatActivity {
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString().toLowerCase();
+                // 按域名屏蔽埋点/监控/追踪请求
+                try {
+                    String host = request.getUrl().getHost();
+                    if (host != null && BLOCKED_DOMAINS.contains(host.toLowerCase())) {
+                        return BLOCKED_RESPONSE;
+                    }
+                } catch (Exception ignored) {}
+                // 按路径屏蔽（Sentry/Slardar 错误上报等）
+                for (String path : BLOCKED_PATHS) {
+                    if (url.contains(path)) {
+                        return BLOCKED_RESPONSE;
+                    }
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 // 根据页面类型注入不同脚本：
@@ -154,6 +201,8 @@ public class MainActivity extends AppCompatActivity {
                         || url.endsWith("douyin.com") || url.endsWith("douyin.com/"));
                 String script = isVideoFeed ? VIDEO_FEED_SCRIPT : AUTO_CLICK_SCRIPT;
                 view.evaluateJavascript(script, null);
+                // 无论哪个页面都注入性能优化脚本（防内存堆积 + 减渲染负担，解决卡顿）
+                view.evaluateJavascript(PERF_SCRIPT, null);
             }
 
             @Override
@@ -249,5 +298,55 @@ public class MainActivity extends AppCompatActivity {
         "    try{ closeLogin(); }catch(e){}" +
         "    if(++t>8){ clearInterval(timer); }" +
         "  },1500);" +
+        "})();";
+
+    /**
+     * 性能优化脚本（参考"抖音网页版全能优化"油猴脚本 + douyin-tv，解决卡顿）：
+     * 1. 定期清理远离视口的视频卡片 DOM，防止内存无限堆积导致越用越卡
+     * 2. 禁用礼物动画/入场特效/弹幕飘屏等 GPU 开销大的动画
+     * 3. 视频仅预加载元数据，避免同时解码多个视频抢资源
+     * 4. 隐藏广告/推广等非视频元素
+     */
+    private static final String PERF_SCRIPT =
+        "javascript:(function(){" +
+        "  if(window.__dp_perf) return; window.__dp_perf=true;" +
+        "  // 禁用重动画：礼物特效、入场特效、飘屏、粒子等" +
+        "  function killAnimations(){" +
+        "    var s=document.getElementById('__dp_perf_css');" +
+        "    if(!s){" +
+        "      s=document.createElement('style'); s.id='__dp_perf_css';" +
+        "      s.textContent='" +
+        "        [class*=\"gift\"], [class*=\"Gift\"], [class*=\"effect\"], [class*=\"Effect\"]," +
+        "        [class*=\"particle\"], [class*=\"Particle\"], [class*=\"animation\"], [class*=\"Animation\"]" +
+        "        { animation:none !important; transition:none !important; }" +
+        "        video { max-width:100%; height:auto; }' ;" +
+        "      document.head.appendChild(s);" +
+        "    }" +
+        "  }" +
+        "  // 视频优化：只预加载元数据，避免后台多个视频同时拉流解码" +
+        "  function optimizeVideos(){" +
+        "    document.querySelectorAll('video').forEach(function(v){" +
+        "      if(v.getAttribute('preload')!=='metadata') v.setAttribute('preload','metadata');" +
+        "      try{ v.disableRemotePlayback=true; }catch(e){}" +
+        "    });" +
+        "  }" +
+        "  // 清理远离视口的视频卡片 DOM，释放内存（关键，防越用越卡）" +
+        "  var lastClean=0;" +
+        "  function cleanupDom(){" +
+        "    var now=Date.now();" +
+        "    if(now-lastClean<10000) return; lastClean=now;" +
+        "    try{" +
+        "      var cards=document.querySelectorAll('[class*=\"feed\"], [class*=\"Feed\"], [class*=\"waterfall\"], [class*=\"Waterfall\"]');" +
+        "      var limit=40;" +
+        "      if(cards.length>limit){" +
+        "        for(var i=0;i<cards.length-limit;i++){" +
+        "          var el=cards[i]; var r=el.getBoundingClientRect();" +
+        "          if(r.bottom<-2000 || r.top>window.innerHeight+2000){ el.remove(); }" +
+        "        }" +
+        "      }" +
+        "    }catch(e){}" +
+        "  }" +
+        "  killAnimations(); optimizeVideos();" +
+        "  setInterval(function(){ killAnimations(); optimizeVideos(); cleanupDom(); },5000);" +
         "})();";
 }
