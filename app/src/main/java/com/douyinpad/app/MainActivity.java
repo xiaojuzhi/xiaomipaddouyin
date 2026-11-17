@@ -138,12 +138,18 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // 根据页面类型注入不同的 UI 缩放策略
-                // 精选/推荐视频流页面（5列密集网格）需要更强放大，直播页保持现状。
+                // 根据页面类型区分 UI 缩放：
+                // 精选/推荐视频流页面（5列密集网格、文字小）需要更强放大，
+                // 直播页（live.douyin.com / 直播列表）保持 130 现状。
                 // 关键：live.douyin.com 开头的直播页一定不走视频流增强，避免误伤直播页。
                 boolean isLive = url.contains("live.douyin.com");
                 boolean isVideoFeed = !isLive && (url.contains("jingxuan") || url.contains("recommend")
                         || url.contains("discover") || url.contains("/user/") || url.contains("/video/"));
+
+                // 用原生 setTextZoom（可靠、一定生效）动态调整文字缩放
+                view.getSettings().setTextZoom(isVideoFeed ? 160 : 130);
+
+                // 视频流页面额外注入 CSS 放大标题/互动数据并放宽网格
                 String script = isVideoFeed ? VIDEO_FEED_SCRIPT : AUTO_CLICK_SCRIPT;
                 view.evaluateJavascript(script, null);
             }
@@ -187,16 +193,15 @@ public class MainActivity extends AppCompatActivity {
         "    if(s){return;}" +
         "    s=document.createElement('style');" +
         "    s.id='__dp_feed';" +
-        "    var css='html{font-size:120% !important;}' +" +
-        "      ' body{zoom:1.25;}' +" +
+        // 注意：主体文字放大已由原生 setTextZoom(160) 负责，这里只放大标题/互动数据等局部元素，
+        // 不再用 body{zoom}，避免和 setTextZoom 叠加导致过度放大。
+        "    var css='html{font-size:115% !important;}' +" +
         // 放大视频卡片标题、作者名、互动数据（通用选择器，不依赖哈希类名）
-        "      ' [class*=\"title\"], [class*=\"Title\"]{font-size:1.25em !important; line-height:1.4 !important;}' +" +
-        "      ' [class*=\"author\"], [class*=\"Author\"], [class*=\"nickname\"], [class*=\"Nickname\"], [class*=\"name\"]{font-size:1.2em !important;}' +" +
-        "      ' [class*=\"count\"], [class*=\"Count\"], [class*=\"like\"], [class*=\"Like\"], [class*=\"comment\"], [class*=\"Comment\"], [class*=\"statistic\"], [class*=\"Statistic\"], [class*=\"data\"]{font-size:1.2em !important;}' +" +
+        "      ' [class*=\"title\"], [class*=\"Title\"]{font-size:1.15em !important; line-height:1.4 !important;}' +" +
+        "      ' [class*=\"author\"], [class*=\"Author\"], [class*=\"nickname\"], [class*=\"Nickname\"], [class*=\"name\"]{font-size:1.1em !important;}' +" +
+        "      ' [class*=\"count\"], [class*=\"Count\"], [class*=\"like\"], [class*=\"Like\"], [class*=\"comment\"], [class*=\"Comment\"], [class*=\"statistic\"], [class*=\"Statistic\"], [class*=\"data\"]{font-size:1.1em !important;}' +" +
         // 缩略图上的角标（时长、播放量）也放大
-        "      ' [class*=\"tag\"], [class*=\"Tag\"], [class*=\"badge\"], [class*=\"Badge\"], [class*=\"duration\"], [class*=\"Duration\"], [class*=\"hot\"], [class*=\"Hot\"]{font-size:1.15em !important;}' +" +
-        // 视频卡片网格放宽：让卡片最小宽度变大，5列变3列，观感更接近直播列表页
-        "      ' [class*=\"waterfall\"], [class*=\"Waterfall\"], [class*=\"grid\"], [class*=\"Grid\"], [class*=\"list\"], [class*=\"List\"], [class*=\"feed\"], [class*=\"Feed\"], [class*=\"container\"], [class*=\"Container\"]{grid-template-columns:repeat(auto-fill,minmax(360px,1fr)) !important; column-gap:24px !important; row-gap:24px !important;}' ;" +
+        "      ' [class*=\"tag\"], [class*=\"Tag\"], [class*=\"badge\"], [class*=\"Badge\"], [class*=\"duration\"], [class*=\"Duration\"], [class*=\"hot\"], [class*=\"Hot\"]{font-size:1.08em !important;}' ;" +
         "    s.textContent=css;" +
         "    document.head.appendChild(s);" +
         "  }" +
