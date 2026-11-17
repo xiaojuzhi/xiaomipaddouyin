@@ -88,6 +88,8 @@ public class MainActivity extends AppCompatActivity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void configureWebView() {
+        // 开启 WebView 远程调试（仅 debug 排查用，正式可去掉）
+        WebView.setWebContentsDebuggingEnabled(true);
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
