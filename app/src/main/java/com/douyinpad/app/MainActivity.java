@@ -122,10 +122,14 @@ public class MainActivity extends AppCompatActivity {
         // 6. 关闭 WebView 的调试端口（正式版不需要，去掉还能省一点开销）
         //    （已移除 setWebContentsDebuggingEnabled）
 
-        // ===== UI 缩放：统一放大，让所有页面观感一致 =====
-        // 直播列表页在 130 下观感正好；精选/推荐视频流是 5 列密集网格，同字号下偏小。
-        // 这里把全局文字缩放到 150，让视频流页文字明显变大，同时直播页仍可接受。
-        settings.setTextZoom(150);
+        // 7. 关闭滚动条绘制开销，减少滚动时的合成负担
+        webView.setScrollBarStyle(View.SCROLLBARS_OUTSIDE_OVERLAY);
+
+        // ===== UI 缩放 =====
+        // 直播列表页在 130 下观感正好（文字相对字号，受 setTextZoom 影响），保持 130。
+        // 精选/推荐视频流的卡片标题是固定像素字号，setTextZoom 对其无效，
+        // 需要在 onPageFinished 里根据 URL 注入更强的 CSS 放大（见下）。
+        settings.setTextZoom(130);
 
         // 关键：用桌面版 Chrome UA（参考 douyin-tv 成熟方案）。
         // 抖音网页版对桌面 UA 返回内容流（可看视频），对移动 UA 才跳"下载App"引导页。
@@ -141,8 +145,15 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // 注入统一的 UI 放大 CSS + 自动关闭登录弹窗
-                view.evaluateJavascript(UI_SCALE_SCRIPT, null);
+                // 根据页面类型注入不同脚本：
+                // - 精选/推荐视频流页（密集网格、文字小）→ 强 CSS 放大
+                // - 直播页（live.douyin.com）→ 保持原样，只做登录弹窗关闭
+                boolean isLive = url.contains("live.douyin.com");
+                boolean isVideoFeed = !isLive && (url.contains("jingxuan") || url.contains("recommend")
+                        || url.contains("discover") || url.contains("/user/") || url.contains("/video/")
+                        || url.endsWith("douyin.com") || url.endsWith("douyin.com/"));
+                String script = isVideoFeed ? VIDEO_FEED_SCRIPT : AUTO_CLICK_SCRIPT;
+                view.evaluateJavascript(script, null);
             }
 
             @Override
@@ -172,47 +183,71 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 统一 UI 缩放脚本：
-     * 1. 注入 CSS，放大卡片标题/作者/互动数据等文字（子串匹配类名，不依赖会变的哈希类名）
-     * 2. 自动关闭登录弹窗
-     * 主体文字已由原生 setTextZoom(150) 负责，这里只放大局部小字，避免过度放大。
+     * 精选/推荐视频流专用脚本：强 CSS 放大 + 持续注入。
+     * 精选页视频卡片标题是固定像素字号（setTextZoom 无效），必须用 CSS 强制放大。
+     * 抖音是 SPA，页面会反复重绘覆盖注入的 style，所以用 MutationObserver + 定时器持续兜底。
      */
-    private static final String UI_SCALE_SCRIPT =
+    private static final String VIDEO_FEED_SCRIPT =
         "javascript:(function(){" +
-        "  function injectCss(){" +
-        "    var s=document.getElementById('__dp_ui');" +
-        "    if(s){return;}" +
-        "    s=document.createElement('style');" +
-        "    s.id='__dp_ui';" +
-        "    var css='html{font-size:110% !important;}' +" +
-        // 放大视频卡片标题、作者名、互动数据（通用选择器，不依赖哈希类名）
-        "      ' [class*=\"title\"], [class*=\"Title\"]{font-size:1.12em !important; line-height:1.4 !important;}' +" +
-        "      ' [class*=\"author\"], [class*=\"Author\"], [class*=\"nickname\"], [class*=\"Nickname\"]{font-size:1.08em !important;}' +" +
-        "      ' [class*=\"count\"], [class*=\"Count\"], [class*=\"like\"], [class*=\"Like\"], [class*=\"comment\"], [class*=\"Comment\"], [class*=\"statistic\"], [class*=\"Statistic\"]{font-size:1.08em !important;}' +" +
-        "      ' [class*=\"tag\"], [class*=\"Tag\"], [class*=\"badge\"], [class*=\"Badge\"], [class*=\"duration\"], [class*=\"Duration\"]{font-size:1.05em !important;}' ;" +
-        "    s.textContent=css;" +
-        "    document.head.appendChild(s);" +
+        "  var CSS_ID='__dp_feed_zoom';" +
+        "  function buildCss(){" +
+        "    return 'html{font-size:120% !important;}' +" +
+        // 用 zoom 整体放大（对固定 px 也有效）
+        "      ' body{zoom:1.3 !important;}' +" +
+        // 放大卡片标题/作者/互动数据（子串匹配类名）
+        "      ' [class*=\"title\"], [class*=\"Title\"]{font-size:1.25em !important; line-height:1.45 !important;}' +" +
+        "      ' [class*=\"author\"], [class*=\"Author\"], [class*=\"nickname\"], [class*=\"Nickname\"], [class*=\"name\"]{font-size:1.2em !important;}' +" +
+        "      ' [class*=\"count\"], [class*=\"Count\"], [class*=\"like\"], [class*=\"Like\"], [class*=\"comment\"], [class*=\"Comment\"], [class*=\"statistic\"], [class*=\"Statistic\"], [class*=\"data\"]{font-size:1.2em !important;}' +" +
+        "      ' [class*=\"tag\"], [class*=\"Tag\"], [class*=\"badge\"], [class*=\"Badge\"], [class*=\"duration\"], [class*=\"Duration\"]{font-size:1.15em !important;}' ;" +
+        "  }" +
+        "  function ensureStyle(){" +
+        "    var s=document.getElementById(CSS_ID);" +
+        "    if(!s){ s=document.createElement('style'); s.id=CSS_ID; document.head.appendChild(s); }" +
+        "    if(s.textContent.indexOf('zoom:1.3')<0){ s.textContent=buildCss(); }" +
         "  }" +
         "  function closeLogin(){" +
         "    var closes=document.querySelectorAll('[class*=\"close\"],[class*=\"Close\"]," +
         "[aria-label*=\"close\"],[class*=\"modal\"] [class*=\"close\"]," +
         "[class*=\"dialog\"] [class*=\"close\"]');" +
         "    for(var i=0;i<closes.length;i++){" +
-        "      var c=closes[i];" +
-        "      var r=c.getBoundingClientRect();" +
-        "      if(r.width>0 && r.height>0 && r.width<100 && r.height<100){" +
-        "        c.click();" +
-        "        return true;" +
-        "      }" +
+        "      var c=closes[i]; var r=c.getBoundingClientRect();" +
+        "      if(r.width>0 && r.height>0 && r.width<100 && r.height<100){ c.click(); return true; }" +
         "    }" +
         "    return false;" +
         "  }" +
-        "  injectCss();" +
-        "  var tries=0;" +
+        "  ensureStyle();" +
+        "  // MutationObserver 监听 DOM 变化，防止 SPA 重绘覆盖注入的 style" +
+        "  try{" +
+        "    var mo=new MutationObserver(function(){ ensureStyle(); });" +
+        "    mo.observe(document.head, {childList:true});" +
+        "  }catch(e){}" +
+        "  // 定时兜底：持续确保样式存在 + 关登录弹窗" +
+        "  var t=0;" +
         "  var timer=setInterval(function(){" +
-        "    tries++;" +
+        "    ensureStyle(); try{ closeLogin(); }catch(e){}" +
+        "    if(++t>20){ clearInterval(timer); }" +
+        "  },2000);" +
+        "})();";
+
+    /**
+     * 直播页脚本：保持 UI 原样（setTextZoom 130 已足够），只自动关闭登录弹窗。
+     */
+    private static final String AUTO_CLICK_SCRIPT =
+        "javascript:(function(){" +
+        "  function closeLogin(){" +
+        "    var closes=document.querySelectorAll('[class*=\"close\"],[class*=\"Close\"]," +
+        "[aria-label*=\"close\"],[class*=\"modal\"] [class*=\"close\"]," +
+        "[class*=\"dialog\"] [class*=\"close\"]');" +
+        "    for(var i=0;i<closes.length;i++){" +
+        "      var c=closes[i]; var r=c.getBoundingClientRect();" +
+        "      if(r.width>0 && r.height>0 && r.width<100 && r.height<100){ c.click(); return true; }" +
+        "    }" +
+        "    return false;" +
+        "  }" +
+        "  var t=0;" +
+        "  var timer=setInterval(function(){" +
         "    try{ closeLogin(); }catch(e){}" +
-        "    if(tries>=6){ clearInterval(timer); }" +
+        "    if(++t>8){ clearInterval(timer); }" +
         "  },1500);" +
         "})();";
 }
