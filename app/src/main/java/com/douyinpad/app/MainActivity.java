@@ -125,8 +125,14 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                // 第一版方式：loadUrl + 返回 true
-                view.loadUrl(request.getUrl().toString());
+                String url = request.getUrl().toString();
+                // 关键：拦截抖音的私有协议跳转（bytedance:// snssdk:// 等），
+                // 否则 WebView 会报 net::ERR_UNKNOWN_URL_SCHEME 导致"网页无法打开"
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    view.loadUrl(url);
+                    return true;
+                }
+                // 非 http/https 协议（bytedance:// 等）一律拦截，不加载
                 return true;
             }
         });
