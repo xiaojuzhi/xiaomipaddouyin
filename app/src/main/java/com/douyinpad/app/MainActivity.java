@@ -151,28 +151,40 @@ public class MainActivity extends AppCompatActivity {
         return super.onKeyDown(keyCode, event);
     }
 
-    /** 自动点击脚本：优先点击「推荐」标签，找不到则点击中央激活首页 */
+    /** 自动脚本：自动关闭登录弹窗（找关闭按钮/遮罩），让内容流不被遮挡 */
     private static final String AUTO_CLICK_SCRIPT =
         "javascript:(function(){" +
-        "  function clickText(keywords){" +
-        "    var all=document.querySelectorAll('a,div,span,li,p,button');" +
-        "    for(var i=0;i<all.length;i++){" +
-        "      var t=(all[i].innerText||all[i].textContent||'').trim();" +
-        "      if(t==='推荐'||t==='精彩'||t==='关注'){" +
-        "        all[i].click();" +
+        "  function closeLogin(){" +
+        "    // 尝试找登录弹窗的关闭按钮（×）
+        "    var closes=document.querySelectorAll('[class*=\"close\"], [class*=\"Close\"], " +
+        "      [aria-label*=\"关闭\"], [aria-label*=\"close\"], .dy-account-close, " +
+        "      [class*=\"modal\"] [class*=\"close\"], [class*=\"dialog\"] [class*=\"close\"]');" +
+        "    for(var i=0;i<closes.length;i++){" +
+        "      var c=closes[i];" +
+        "      var r=c.getBoundingClientRect();" +
+        "      if(r.width>0 && r.height>0 && r.width<100 && r.height<100){" +
+        "        c.click();" +
+        "        return true;" +
+        "      }" +
+        "    }" +
+        "    // 兜底：点击遮罩层（半透明背景）
+        "    var masks=document.querySelectorAll('[class*=\"mask\"], [class*=\"Mask\"], " +
+        "      [class*=\"overlay\"], [class*=\"Overlay\"]');" +
+        "    for(var j=0;j<masks.length;j++){" +
+        "      var m=masks[j];" +
+        "      var rm=m.getBoundingClientRect();" +
+        "      if(rm.width>window.innerWidth*0.8 && rm.height>window.innerHeight*0.8){" +
+        "        m.click();" +
         "        return true;" +
         "      }" +
         "    }" +
         "    return false;" +
         "  }" +
-        "  setTimeout(function(){" +
-        "    try{" +
-        "      if(!clickText()){" +
-        "        var x=window.innerWidth/2, y=window.innerHeight/2;" +
-        "        var el=document.elementFromPoint(x,y);" +
-        "        if(el){el.click();}" +
-        "      }" +
-        "    }catch(e){}" +
-        "  },2000);" +
+        "  var tries=0;" +
+        "  var timer=setInterval(function(){" +
+        "    tries++;" +
+        "    try{ closeLogin(); }catch(e){}" +
+        "    if(tries>=8){ clearInterval(timer); }" +
+        "  },1500);" +
         "})();";
 }
