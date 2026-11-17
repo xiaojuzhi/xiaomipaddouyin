@@ -25,8 +25,8 @@ public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
 
-    // 抖音网页版推荐流入口（带 recommend 参数，直接进内容流，跳过电脑版落地页）
-    private static final String DOUYIN_HOME = "https://www.douyin.com/?recommend=1";
+    // 抖音网页版精选页入口（jingxuan 是能直接播放内容流的正确入口，参考成熟开源项目 douyin-tv）
+    private static final String DOUYIN_HOME = "https://www.douyin.com/jingxuan?from_nav=1";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -105,14 +105,9 @@ public class MainActivity extends AppCompatActivity {
         settings.setBlockNetworkImage(false);
         settings.setLoadsImagesAutomatically(true);
 
-        // 第一版验证可用的 UA（不要改成 Pixel 等，会导致白屏/下载页）
-        // 标准移动端 UA（让抖音返回手机版内容流，而不是电脑版落地页）
-        // 注意：不要用带 wv 的 UA（会被识别为 WebView），也不要用非常规设备名
-        settings.setUserAgentString(
-            "Mozilla/5.0 (Linux; Android 14; 24030PN60G Build/UKQ1.231003.002) " +
-            "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/122.0.0.0 " +
-            "Mobile Safari/537.36"
-        );
+        // 使用 WebView 默认 UA（参考成熟项目 douyin-tv：不设置 UA 也能正常播放，
+        // 关键在入口 URL 用 jingxuan 精选页，而非纠结 UA）
+        // settings.setUserAgentString(...);  —— 已移除，走默认
 
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
